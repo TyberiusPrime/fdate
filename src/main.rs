@@ -2,6 +2,9 @@ use anyhow::{Context, Result};
 use chrono::Datelike;
 use tuikit::prelude::*;
 
+
+const MAX_SEARCH_RESULT_DEFAULT: usize = 5;
+
 pub fn parse_to_arguments_replace(
     cmd: &str,
     replacement: Option<&str>,
@@ -28,19 +31,51 @@ pub fn parse_to_arguments_replace(
     parsed
 }
 
+pub fn print_help() {
+    println!("fdate - show an interactive calendar on the console");
+    println!("Keyboard input:");
+    println!("\t left/right: move one day back/forward");
+    println!("\t up/down: move one week back/forward");
+    println!("\t page up/page down: move one month back/forward");
+    println!("\t home/end: move one year back/forward");
+    println!("\t .: goto today");
+    println!("\t >: goto tomorrow");
+    println!("\t <: goto yesterday");
+    println!("\t m/t/w/h/f/s/u - go to next monday/tuesday/wednesday/thursday/friday/saturday/sunday");
+    println!("\t M/T/W/H/F/S/U - go to last monday/tuesday/wednesday/thursday/friday/saturday/sunday");
+    println!("\t digits - enter date. No '-' necessary.");
+    println!("\t tab - jump two next section of date (so year/month/day)");
+    println!("\t backspace - go back one character in entered date");
+    println!("\t Enter - leave, print chosen date, exit code 0");
+    println!("\t Escape - leave, exit code 1");
+    println!("");
+    println!("CLI options");
+    println!("\t -h | --help - print this help");
+    println!("\t --title=<whatever> - show this as title (before chosen date)");
+    println!("\t --highlight=<iso-date> - Highlight this date (can be passed multiple times)");
+    println!("\t --search=<external command> - Whenever the date is changed, call this command with the date as argument. Use '{{}}' as placeholder for the date. The results are shown below the date selection, up to --max-results lines");
+    println!("\t --max-results=<number> - Maximum number of lines to show for --search. Default: {MAX_SEARCH_RESULT_DEFAULT}");
+    println!("\t --output-filename<filename> - write chosen date to this file as well as outputing it on stdout");
+}
+
+
 fn main() -> Result<()> {
     let mut title = "".to_string();
     let mut highlights = Vec::new();
     let mut search = None;
-    let mut max_results = 5;
+    let mut max_results = MAX_SEARCH_RESULT_DEFAULT;
     let mut sort_search = false;
     let mut output_filename = None;
     for arg in std::env::args().skip(1) {
-        if arg.starts_with("--title=") {
-            title = title.strip_prefix("--title=").unwrap().to_string();
+        if arg == "--help" || arg == "-h" {
+            print_help();
+            std::process::exit(0);
+        }
+        else if arg.starts_with("--title=") {
+            title = arg.strip_prefix("--title=").unwrap().to_string();
             title.push_str(": ");
         } else if arg.starts_with("--highlight=") {
-            for adate in arg.strip_prefix("--higlight=").unwrap().split(',') {
+            for adate in arg.strip_prefix("--highlight=").unwrap().split(',') {
                 highlights.push(
                     chrono::NaiveDate::parse_from_str(adate, "%Y-%m-%d")
                         .with_context(|| format!("Failed to parsed date '{}'", adate))?,
@@ -50,8 +85,8 @@ fn main() -> Result<()> {
             search = Some(arg.strip_prefix("--search=").unwrap().to_string());
         } else if arg.starts_with("--sort-search") {
             sort_search = true;
-        } else if arg.starts_with("--output_filename=") {
-            output_filename = Some(arg.strip_prefix("--output_filename=").unwrap().to_string());
+        } else if arg.starts_with("--output-filename=") {
+            output_filename = Some(arg.strip_prefix("--output-filename=").unwrap().to_string());
         } else if arg.starts_with("--max-results=") {
             max_results = arg
                 .strip_prefix("--max-results=")
@@ -71,8 +106,8 @@ fn main() -> Result<()> {
         let (width, _height) = term.term_size().unwrap();
         match ev {
             Event::Key(Key::Enter) => {
-                println!("{}", date.format("%Y-%m-%d"));
                 term.clear()?;
+                println!("{}", date.format("%Y-%m-%d"));
                 if let Some(output_filename) = &output_filename {
                     std::fs::write(output_filename, date.format("%Y-%m-%d").to_string())?;
                 }
@@ -103,7 +138,11 @@ fn main() -> Result<()> {
                 date = date - chrono::Months::new(12);
             }
             Event::Key(Key::Backspace) => {
-                cursor_column = 0.max(cursor_column - 1);
+                cursor_column = if cursor_column > 0 {
+                    cursor_column - 1
+                } else {
+                    cursor_column
+                };
                 if cursor_column == 4 || cursor_column == 7 {
                     cursor_column -= 1;
                 }
@@ -294,7 +333,7 @@ fn main() -> Result<()> {
         let centered_date = format!("{:^width$}", str_date, width = used_col);
         let cursor_offset = centered_date.len() / 2 - str_date.len() / 2 + title.len() - 1;
         let _ = term.print(used_row, 0, &centered_date);
-        let _ = term.set_cursor(used_row, cursor_column + cursor_offset);
+        let _ = term.set_cursor(used_row, cursor_column + cursor_offset +1);
 
         let used_row = used_row + 1;
 
@@ -465,6 +504,8 @@ fn main() -> Result<()> {
             *col += 1;
             if (*col == 4) || (*col == 7) {
                 *col += 1;
+            } else if  *col == 4 + 3 + 3 {
+                *col = 0;
             }
         }
     }
