@@ -45,12 +45,13 @@
       devShell = pkgs.mkShell {
         # supply the specific rust version
         nativeBuildInputs = [
-          rust
-          pkgs.rust-analyzer
-          pkgs.git
-          pkgs.cargo-udeps
-          pkgs.cargo-audit
           pkgs.bacon
+          pkgs.cargo-audit
+          pkgs.cargo-license
+          pkgs.cargo-udeps
+          pkgs.git
+          pkgs.rust-analyzer
+          rust
         ];
       };
     });

@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use chrono::Datelike;
 use tuikit::prelude::*;
 
-
 const MAX_SEARCH_RESULT_DEFAULT: usize = 5;
 
 pub fn parse_to_arguments_replace(
@@ -41,8 +40,13 @@ pub fn print_help() {
     println!("\t .: goto today");
     println!("\t >: goto tomorrow");
     println!("\t <: goto yesterday");
-    println!("\t m/t/w/h/f/s/u - go to next monday/tuesday/wednesday/thursday/friday/saturday/sunday");
-    println!("\t M/T/W/H/F/S/U - go to last monday/tuesday/wednesday/thursday/friday/saturday/sunday");
+    println!("\t ,: goto to default date (default default is today)");
+    println!(
+        "\t m/t/w/h/f/s/u - go to next monday/tuesday/wednesday/thursday/friday/saturday/sunday"
+    );
+    println!(
+        "\t M/T/W/H/F/S/U - go to last monday/tuesday/wednesday/thursday/friday/saturday/sunday"
+    );
     println!("\t digits - enter date. No '-' necessary.");
     println!("\t tab - jump two next section of date (so year/month/day)");
     println!("\t backspace - go back one character in entered date");
@@ -51,6 +55,7 @@ pub fn print_help() {
     println!("");
     println!("CLI options");
     println!("\t -h | --help - print this help");
+    println!("\t YYYY--mm-dd - default / start date");
     println!("\t --title=<whatever> - show this as title (before chosen date)");
     println!("\t --highlight=<iso-date> - Highlight this date (can be passed multiple times)");
     println!("\t --search=<external command> - Whenever the date is changed, call this command with the date as argument. Use '{{}}' as placeholder for the date. The results are shown below the date selection, up to --max-results lines");
@@ -58,6 +63,23 @@ pub fn print_help() {
     println!("\t --output-filename<filename> - write chosen date to this file as well as outputing it on stdout");
 }
 
+fn is_string_iso_date(maybe_a_date: &str) -> bool {
+    if maybe_a_date.len() != 10 {
+        return false;
+    }
+    if maybe_a_date.chars().nth(4).unwrap() != '-' || maybe_a_date.chars().nth(7).unwrap() != '-' {
+        return false;
+    }
+    for (i, c) in maybe_a_date.chars().enumerate() {
+        if i == 4 || i == 7 {
+            continue;
+        }
+        if !c.is_ascii_digit() {
+            return false;
+        }
+    }
+    true
+}
 
 fn main() -> Result<()> {
     let mut title = "".to_string();
@@ -66,12 +88,13 @@ fn main() -> Result<()> {
     let mut max_results = MAX_SEARCH_RESULT_DEFAULT;
     let mut sort_search = false;
     let mut output_filename = None;
+    let mut debug = false;
+    let mut start_date: chrono::NaiveDate = chrono::Local::now().naive_local().date();
     for arg in std::env::args().skip(1) {
         if arg == "--help" || arg == "-h" {
             print_help();
             std::process::exit(0);
-        }
-        else if arg.starts_with("--title=") {
+        } else if arg.starts_with("--title=") {
             title = arg.strip_prefix("--title=").unwrap().to_string();
             title.push_str(": ");
         } else if arg.starts_with("--highlight=") {
@@ -93,12 +116,19 @@ fn main() -> Result<()> {
                 .unwrap()
                 .parse::<usize>()
                 .with_context(|| format!("Failed to parse max_results '{}'", arg))?;
+        } else if arg == "--debug" {
+            debug = true;
+        } else if is_string_iso_date(&arg) {
+            start_date = chrono::NaiveDate::parse_from_str(&arg, "%Y-%m-%d")
+                .with_context(|| format!("Failed to parsed date '{}'", arg))?;
+        } else {
+            println!("Unknown argument '{}'", arg);
+            std::process::exit(1);
         }
     }
     let term: Term<()> = Term::with_height(TermHeight::Fixed(10 + max_results)).unwrap();
     let mut cursor_column: usize = 0;
-
-    let mut date: chrono::NaiveDate = chrono::Local::now().naive_local().date();
+    let mut date = start_date;
 
     while let Ok(ev) = term.poll_event() {
         let _ = term.clear();
@@ -159,6 +189,10 @@ fn main() -> Result<()> {
             Event::Key(Key::Char('.')) => {
                 date = chrono::Local::now().naive_local().date();
             }
+            Event::Key(Key::Char(',')) => {
+                date = start_date;
+            }
+
             Event::Key(Key::Char('<')) => {
                 date = chrono::Local::now().naive_local().date() + chrono::Duration::days(-1);
             }
@@ -327,15 +361,24 @@ fn main() -> Result<()> {
         );
         let used_row = used_row.max(8);
 
-        let str_date = format!("{}{}", title, date.format("%Y-%m-%d %a KW %V"))
+        let str_date = format!("{}{}", title, date.format("%Y-%m-%d %a WN %V"))
             .trim_start()
             .to_string();
         let centered_date = format!("{:^width$}", str_date, width = used_col);
         let cursor_offset = centered_date.len() / 2 - str_date.len() / 2 + title.len() - 1;
         let _ = term.print(used_row, 0, &centered_date);
-        let _ = term.set_cursor(used_row, cursor_column + cursor_offset +1);
+        let _ = term.set_cursor(used_row, cursor_column + cursor_offset + 1);
 
         let used_row = used_row + 1;
+
+        if debug {
+            match ev {
+                Event::Key(x) => {
+                    let _ = term.print(used_row, 0, &format!("Key pressed: {:?}", x));
+                }
+                _ => {}
+            }
+        }
 
         if let Some(search_cmd) = &search {
             let search_result = get_search_results(date, search_cmd, max_results)?;
@@ -504,7 +547,7 @@ fn main() -> Result<()> {
             *col += 1;
             if (*col == 4) || (*col == 7) {
                 *col += 1;
-            } else if  *col == 4 + 3 + 3 {
+            } else if *col == 4 + 3 + 3 {
                 *col = 0;
             }
         }
