@@ -23,6 +23,6 @@ Pass `--help` for all options.
 Uses ISO formated dates (YYYY-mm-dd) exclusively. Shows (ISO)
 week number. Years go over 9000. Digit year input does max four digits.
 
-The myriannum ends on a Sunday, apparently. The year 9999 ends on a Friday though.
+The decamillenium ends on a Sunday, apparently. The year 9999 ends on a Friday though.
 
 ![fdate demonstration gif](./docs/demo.gif)
