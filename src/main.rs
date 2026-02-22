@@ -56,8 +56,7 @@ pub fn print_help() {
     println!("CLI options");
     println!("\t -h | --help - print this help");
     println!("\t YYYY--mm-dd - default / start date (ISO format)");
-    println!("\t --german - use German date format (dd.mm.yyyy) for input and output");
-    println!("\t   With --german, start date can be given as dd.mm.yyyy");
+    println!("\t --german - enter dates in German style (dd.mm.yyyy) in the TUI; output remains YYYY-MM-DD");
     println!("\t --title=<whatever> - show this as title (before chosen date)");
     println!("\t --highlight=<iso-date> - Highlight this date (can be passed multiple times)");
     println!("\t --search=<external command> - Whenever the date is changed, call this command with the date as argument. Use '{{}}' as placeholder for the date. The results are shown below the date selection, up to --max-results lines");
@@ -83,24 +82,6 @@ fn is_string_iso_date(maybe_a_date: &str) -> bool {
     true
 }
 
-fn is_string_german_date(maybe_a_date: &str) -> bool {
-    if maybe_a_date.len() != 10 {
-        return false;
-    }
-    if maybe_a_date.chars().nth(2).unwrap() != '.' || maybe_a_date.chars().nth(5).unwrap() != '.' {
-        return false;
-    }
-    for (i, c) in maybe_a_date.chars().enumerate() {
-        if i == 2 || i == 5 {
-            continue;
-        }
-        if !c.is_ascii_digit() {
-            return false;
-        }
-    }
-    true
-}
-
 fn main() -> Result<()> {
     let mut title = "".to_string();
     let mut highlights = Vec::new();
@@ -111,19 +92,12 @@ fn main() -> Result<()> {
     let mut debug = false;
     let mut german = false;
     let mut start_date: chrono::NaiveDate = chrono::Local::now().naive_local().date();
-    // First pass: detect --german so date arguments are parsed in the correct format
-    for arg in std::env::args().skip(1) {
-        if arg == "--german" {
-            german = true;
-            break;
-        }
-    }
     for arg in std::env::args().skip(1) {
         if arg == "--help" || arg == "-h" {
             print_help();
             std::process::exit(0);
         } else if arg == "--german" {
-            // already handled in first pass
+            german = true;
         } else if arg.starts_with("--title=") {
             title = arg.strip_prefix("--title=").unwrap().to_string();
             title.push_str(": ");
@@ -148,9 +122,6 @@ fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse max_results '{}'", arg))?;
         } else if arg == "--debug" {
             debug = true;
-        } else if german && is_string_german_date(&arg) {
-            start_date = chrono::NaiveDate::parse_from_str(&arg, "%d.%m.%Y")
-                .with_context(|| format!("Failed to parse German date '{}'", arg))?;
         } else if is_string_iso_date(&arg) {
             start_date = chrono::NaiveDate::parse_from_str(&arg, "%Y-%m-%d")
                 .with_context(|| format!("Failed to parsed date '{}'", arg))?;
@@ -170,16 +141,9 @@ fn main() -> Result<()> {
         match ev {
             Event::Key(Key::Enter) => {
                 term.clear()?;
-                if german {
-                    println!("{}", date.format("%d.%m.%Y"));
-                    if let Some(output_filename) = &output_filename {
-                        std::fs::write(output_filename, date.format("%d.%m.%Y").to_string())?;
-                    }
-                } else {
-                    println!("{}", date.format("%Y-%m-%d"));
-                    if let Some(output_filename) = &output_filename {
-                        std::fs::write(output_filename, date.format("%Y-%m-%d").to_string())?;
-                    }
+                println!("{}", date.format("%Y-%m-%d"));
+                if let Some(output_filename) = &output_filename {
+                    std::fs::write(output_filename, date.format("%Y-%m-%d").to_string())?;
                 }
                 std::process::exit(0);
             }
