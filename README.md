@@ -11,13 +11,20 @@ Shows three months, on 'enter', pushes the date to stdout and returns exit code
 Date can be preset, just pass YYYY-MM-DD on command line.
 
 Decent keyboard navigation. No mouse input. Can go next/last "day of the
-week"/week/month/year with a single keypress. Numeric input of arbitrary dates.
-Use 'tab' to skip year/month. Doesn't allow you to type invalid dates, such as
-the 31st of February, or the 13th month. One press keys for today (.) tomorrow
-(>), yesterday (<), default date (,).
+week"/week/month/year with a single keypress (letters for days, shift-letter for previous 
+day. Left-right for days, page-up/down for months, home/end for years).
+One press keys for today (.) tomorrow (>), yesterday (<), default date (,).
+
+Numeric input of arbitrary dates. Use 'tab' to skip year/month when typing. 
+
+Doesn't allow you to type invalid dates, such as the 31st of February, or the 13th month. 
+
+Optionally reverse YYYY-MM-DD to dd.mm.yyyy in interactive (but not in command line arguments /output).
+Most of the time, the date you want is in the current year after all.
 
 Can be used to show data from the selected date (using `--search-command`). Can
 highlight dates (`--highlight=YYYY-MM-DD`).  Can show an arbitrary title / input string (`--title=...`).
+
 Pass `--help` for all options.
 
 Uses ISO formated dates (YYYY-mm-dd) exclusively. Shows (ISO)

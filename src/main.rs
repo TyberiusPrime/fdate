@@ -55,7 +55,8 @@ pub fn print_help() {
     println!("");
     println!("CLI options");
     println!("\t -h | --help - print this help");
-    println!("\t YYYY--mm-dd - default / start date");
+    println!("\t YYYY--mm-dd - default / start date (ISO format)");
+    println!("\t --german - enter dates in German style (dd.mm.yyyy) in the TUI; output remains YYYY-MM-DD");
     println!("\t --title=<whatever> - show this as title (before chosen date)");
     println!("\t --highlight=<iso-date> - Highlight this date (can be passed multiple times)");
     println!("\t --search=<external command> - Whenever the date is changed, call this command with the date as argument. Use '{{}}' as placeholder for the date. The results are shown below the date selection, up to --max-results lines");
@@ -89,11 +90,14 @@ fn main() -> Result<()> {
     let mut sort_search = false;
     let mut output_filename = None;
     let mut debug = false;
+    let mut german = false;
     let mut start_date: chrono::NaiveDate = chrono::Local::now().naive_local().date();
     for arg in std::env::args().skip(1) {
         if arg == "--help" || arg == "-h" {
             print_help();
             std::process::exit(0);
+        } else if arg == "--german" {
+            german = true;
         } else if arg.starts_with("--title=") {
             title = arg.strip_prefix("--title=").unwrap().to_string();
             title.push_str(": ");
@@ -173,12 +177,25 @@ fn main() -> Result<()> {
                 } else {
                     cursor_column
                 };
-                if cursor_column == 4 || cursor_column == 7 {
+                if german {
+                    if cursor_column == 2 || cursor_column == 5 {
+                        cursor_column -= 1;
+                    }
+                } else if cursor_column == 4 || cursor_column == 7 {
                     cursor_column -= 1;
                 }
             }
             Event::Key(Key::Tab) => {
-                if cursor_column < 4 {
+                if german {
+                    // dd.mm.yyyy: day=0-1, month=3-4, year=6-9
+                    if cursor_column < 2 {
+                        cursor_column = 3;
+                    } else if cursor_column < 6 {
+                        cursor_column = 6;
+                    } else {
+                        cursor_column = 0;
+                    }
+                } else if cursor_column < 4 {
                     cursor_column = 5;
                 } else if cursor_column < 7 {
                     cursor_column = 8;
@@ -299,34 +316,34 @@ fn main() -> Result<()> {
                 }
             }
             Event::Key(Key::Char('0')) => {
-                add_digit(&mut cursor_column, 0, &mut date);
+                add_digit(&mut cursor_column, 0, &mut date, german);
             }
             Event::Key(Key::Char('1')) => {
-                add_digit(&mut cursor_column, 1, &mut date);
+                add_digit(&mut cursor_column, 1, &mut date, german);
             }
             Event::Key(Key::Char('2')) => {
-                add_digit(&mut cursor_column, 2, &mut date);
+                add_digit(&mut cursor_column, 2, &mut date, german);
             }
             Event::Key(Key::Char('3')) => {
-                add_digit(&mut cursor_column, 3, &mut date);
+                add_digit(&mut cursor_column, 3, &mut date, german);
             }
             Event::Key(Key::Char('4')) => {
-                add_digit(&mut cursor_column, 4, &mut date);
+                add_digit(&mut cursor_column, 4, &mut date, german);
             }
             Event::Key(Key::Char('5')) => {
-                add_digit(&mut cursor_column, 5, &mut date);
+                add_digit(&mut cursor_column, 5, &mut date, german);
             }
             Event::Key(Key::Char('6')) => {
-                add_digit(&mut cursor_column, 6, &mut date);
+                add_digit(&mut cursor_column, 6, &mut date, german);
             }
             Event::Key(Key::Char('7')) => {
-                add_digit(&mut cursor_column, 7, &mut date);
+                add_digit(&mut cursor_column, 7, &mut date, german);
             }
             Event::Key(Key::Char('8')) => {
-                add_digit(&mut cursor_column, 8, &mut date);
+                add_digit(&mut cursor_column, 8, &mut date, german);
             }
             Event::Key(Key::Char('9')) => {
-                add_digit(&mut cursor_column, 9, &mut date);
+                add_digit(&mut cursor_column, 9, &mut date, german);
             }
             //ctrl c
             Event::Key(Key::ESC) | Event::Key(Key::Char('q')) | Event::Key(Key::Ctrl('c')) => {
@@ -361,9 +378,15 @@ fn main() -> Result<()> {
         );
         let used_row = used_row.max(8);
 
-        let str_date = format!("{}{}", title, date.format("%Y-%m-%d %a WN %V"))
-            .trim_start()
-            .to_string();
+        let str_date = if german {
+            format!("{}{}", title, date.format("%d.%m.%Y %a WN %V"))
+                .trim_start()
+                .to_string()
+        } else {
+            format!("{}{}", title, date.format("%Y-%m-%d %a WN %V"))
+                .trim_start()
+                .to_string()
+        };
         let centered_date = format!("{:^width$}", str_date, width = used_col);
         let cursor_offset = centered_date.len() / 2 - str_date.len() / 2 + title.len() - 1;
         let _ = term.print(used_row, 0, &centered_date);
@@ -526,29 +549,56 @@ fn main() -> Result<()> {
         (start_row + 2 + cal.len(), max_col)
     }
 
-    fn add_digit(col: &mut usize, digit: u8, date: &mut chrono::NaiveDate) {
-        let str_date = format!("{}", date.format("%Y-%m-%d"));
-        //replace char at col with digit
-        let mut chars: Vec<char> = str_date.chars().collect();
-        chars[*col] = std::char::from_digit(digit as u32, 10).unwrap();
-        let new_str_date: String = chars.into_iter().collect();
-        let mut new_date = chrono::NaiveDate::parse_from_str(&new_str_date, "%Y-%m-%d");
-
-        if new_date.is_err() && ((*col == 5) || (*col == 8)) {
+    fn add_digit(col: &mut usize, digit: u8, date: &mut chrono::NaiveDate, german: bool) {
+        if german {
+            // German format: dd.mm.yyyy (separators at positions 2 and 5)
+            let str_date = format!("{}", date.format("%d.%m.%Y"));
             let mut chars: Vec<char> = str_date.chars().collect();
             chars[*col] = std::char::from_digit(digit as u32, 10).unwrap();
-            chars[*col + 1] = if digit == 0 { '1' } else { '0' };
             let new_str_date: String = chars.into_iter().collect();
-            new_date = chrono::NaiveDate::parse_from_str(&new_str_date, "%Y-%m-%d");
-        }
+            let mut new_date = chrono::NaiveDate::parse_from_str(&new_str_date, "%d.%m.%Y");
 
-        if let Ok(new_date) = new_date {
-            *date = new_date;
-            *col += 1;
-            if (*col == 4) || (*col == 7) {
+            if new_date.is_err() && ((*col == 0) || (*col == 3)) {
+                let mut chars: Vec<char> = str_date.chars().collect();
+                chars[*col] = std::char::from_digit(digit as u32, 10).unwrap();
+                chars[*col + 1] = if digit == 0 { '1' } else { '0' };
+                let new_str_date: String = chars.into_iter().collect();
+                new_date = chrono::NaiveDate::parse_from_str(&new_str_date, "%d.%m.%Y");
+            }
+
+            if let Ok(new_date) = new_date {
+                *date = new_date;
                 *col += 1;
-            } else if *col == 4 + 3 + 3 {
-                *col = 0;
+                if (*col == 2) || (*col == 5) {
+                    *col += 1;
+                } else if *col == 10 {
+                    *col = 0;
+                }
+            }
+        } else {
+            let str_date = format!("{}", date.format("%Y-%m-%d"));
+            //replace char at col with digit
+            let mut chars: Vec<char> = str_date.chars().collect();
+            chars[*col] = std::char::from_digit(digit as u32, 10).unwrap();
+            let new_str_date: String = chars.into_iter().collect();
+            let mut new_date = chrono::NaiveDate::parse_from_str(&new_str_date, "%Y-%m-%d");
+
+            if new_date.is_err() && ((*col == 5) || (*col == 8)) {
+                let mut chars: Vec<char> = str_date.chars().collect();
+                chars[*col] = std::char::from_digit(digit as u32, 10).unwrap();
+                chars[*col + 1] = if digit == 0 { '1' } else { '0' };
+                let new_str_date: String = chars.into_iter().collect();
+                new_date = chrono::NaiveDate::parse_from_str(&new_str_date, "%Y-%m-%d");
+            }
+
+            if let Ok(new_date) = new_date {
+                *date = new_date;
+                *col += 1;
+                if (*col == 4) || (*col == 7) {
+                    *col += 1;
+                } else if *col == 4 + 3 + 3 {
+                    *col = 0;
+                }
             }
         }
     }
