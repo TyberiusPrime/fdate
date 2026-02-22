@@ -61,6 +61,14 @@ pub fn print_help() {
     println!("\t --search=<external command> - Whenever the date is changed, call this command with the date as argument. Use '{{}}' as placeholder for the date. The results are shown below the date selection, up to --max-results lines");
     println!("\t --max-results=<number> - Maximum number of lines to show for --search. Default: {MAX_SEARCH_RESULT_DEFAULT}");
     println!("\t --output-filename<filename> - write chosen date to this file as well as outputing it on stdout");
+    println!("\t --multi-exit - use different exit codes for Enter with modifiers:");
+    println!("\t\t 0 = Enter (confirm)");
+    println!("\t\t 1 = Escape/q/Ctrl-C (cancel)");
+    println!("\t\t 2 = Ctrl+Enter (if supported by terminal)");
+    println!("\t\t 3 = Alt+Enter");
+    println!("\t\t 4 = Shift+Enter (if supported by terminal)");
+    println!("\t\t Note: Ctrl+Enter and Shift+Enter are indistinguishable from plain Enter");
+    println!("\t\t in most terminals. Alt+Enter is reliably detected.");
 }
 
 fn is_string_iso_date(maybe_a_date: &str) -> bool {
@@ -89,6 +97,7 @@ fn main() -> Result<()> {
     let mut sort_search = false;
     let mut output_filename = None;
     let mut debug = false;
+    let mut multi_exit = false;
     let mut start_date: chrono::NaiveDate = chrono::Local::now().naive_local().date();
     for arg in std::env::args().skip(1) {
         if arg == "--help" || arg == "-h" {
@@ -118,6 +127,8 @@ fn main() -> Result<()> {
                 .with_context(|| format!("Failed to parse max_results '{}'", arg))?;
         } else if arg == "--debug" {
             debug = true;
+        } else if arg == "--multi-exit" {
+            multi_exit = true;
         } else if is_string_iso_date(&arg) {
             start_date = chrono::NaiveDate::parse_from_str(&arg, "%Y-%m-%d")
                 .with_context(|| format!("Failed to parsed date '{}'", arg))?;
@@ -142,6 +153,14 @@ fn main() -> Result<()> {
                     std::fs::write(output_filename, date.format("%Y-%m-%d").to_string())?;
                 }
                 std::process::exit(0);
+            }
+            Event::Key(Key::AltEnter) => {
+                term.clear()?;
+                println!("{}", date.format("%Y-%m-%d"));
+                if let Some(output_filename) = &output_filename {
+                    std::fs::write(output_filename, date.format("%Y-%m-%d").to_string())?;
+                }
+                std::process::exit(if multi_exit { 3 } else { 0 });
             }
             Event::Key(Key::Up) => {
                 date -= chrono::Duration::days(7);
